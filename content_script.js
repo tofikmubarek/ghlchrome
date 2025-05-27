@@ -126,19 +126,32 @@ function resetForm() {
 }
 
 function prefillForm() {
-    // TODO: Extract actual data from Gmail DOM/InboxSDK
-    // Placeholder data for now
+    // Extract actual data from Gmail DOM
+    const emailSubject = document.querySelector('h2.hP')?.innerText || "";
+    const senderElement = document.querySelector('.gD');
+    const senderName = senderElement?.innerText || "";
+    const senderEmail = senderElement?.getAttribute('email') || "";
+    const firstName = senderName.split(' ')[0] || "";
+
     currentEmailData = {
-        subject: "Sample Email Subject for Opportunity",
-        senderName: "John Doe",
-        senderEmail: "john.doe@example.com"
+        subject: emailSubject,
+        senderName: senderName,
+        senderEmail: senderEmail,
+        firstName: firstName
     };
+
+    console.log("Extracted email data:", {
+      subject: emailSubject,
+      senderName: senderName,
+      senderEmail: senderEmail,
+      firstName: firstName
+    });
+    console.log("Extracted email data - currentEmailData:", JSON.stringify(currentEmailData, null, 2));
 
     if (currentEmailData) {
         document.getElementById("ghl-opportunity-name").value = currentEmailData.subject || "";
         document.getElementById("ghl-contact-name").value = currentEmailData.senderName || "";
         document.getElementById("ghl-contact-email").value = currentEmailData.senderEmail || "";
-        // TODO: Potentially search GHL for contact ID based on email
     }
 }
 
@@ -196,6 +209,13 @@ function handleFormSubmit(event) {
 // --- GHL Data Fetching ---
 function fetchPipelines() {
     console.log("Requesting pipelines from background script...");
+
+    // Check if chrome.runtime is available
+    if (!chrome.runtime) {
+      console.error("Extension context invalidated.");
+      return;
+    }
+
     // Use the correct V1 endpoint
     chrome.runtime.sendMessage({ action: "fetchGHL", endpoint: "/v1/pipelines/" }, (response) => {
         const pipelineSelect = document.getElementById("ghl-pipeline");
@@ -314,4 +334,3 @@ observer.observe(document.body, {
 setTimeout(addGhlButtonToToolbar, 4000); // Increased delay
 
 console.log("GHL Content Script Setup Complete.");
-

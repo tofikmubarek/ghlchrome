@@ -1,8 +1,10 @@
-// background.js - Service Worker for Gmail to GHL Extension
+// background.js
+// Service Worker for Gmail to GHL Extension
+// This script runs in the background and handles communication between the content script and the GoHighLevel API.
 
 // Listen for messages from content scripts or options page
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  console.log("Background script received message:", request);
+  console.log("Background script received message:", request); // Log the received message for debugging
 
   if (request.action === "getApiKey") {
     chrome.storage.sync.get(["ghlApiKey"], (result) => {
@@ -16,17 +18,23 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true; // Indicates that the response is sent asynchronously
   }
 
+  // Handle the "fetchGHL" action
   if (request.action === "fetchGHL") {
+    // Call the handleFetchGHL function to fetch data from the GoHighLevel API
     handleFetchGHL(request.endpoint, request.options, sendResponse);
     return true; // Indicates that the response is sent asynchronously
   }
 
+  // Handle the "createOpportunity" action
   if (request.action === "createOpportunity") {
+    // Call the handleCreateOpportunity function to create a new opportunity in GoHighLevel
     handleCreateOpportunity(request.data, sendResponse);
     return true; // Indicates that the response is sent asynchronously
   }
 
+  // Handle the "updateOpportunityStatus" action
   if (request.action === "updateOpportunityStatus") {
+    // Call the updateOpportunityStatus function to update the status of an opportunity in GoHighLevel
     updateOpportunityStatus(request.pipelineId, request.opportunityId, request.status, request.stageId, sendResponse);
     return true; // Indicates that the response is sent asynchronously
   }
@@ -36,44 +44,65 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   // return false; // No async response
 });
 
+/**
+ * Retrieves the API key from Chrome storage.
+ * @returns {Promise<string>} A promise that resolves with the API key or rejects with an error.
+ */
 async function getApiKey() {
   return new Promise((resolve, reject) => {
+    // Retrieve the API key from Chrome storage
     chrome.storage.sync.get(["ghlApiKey"], (result) => {
       if (chrome.runtime.lastError) {
+        // If there's an error retrieving the API key, log the error and reject the promise
+        console.error("Error retrieving API key:", chrome.runtime.lastError);
         reject(chrome.runtime.lastError);
       } else {
+        // If the API key is retrieved successfully, log it and resolve the promise
+        console.log("API key retrieved successfully:", result.ghlApiKey);
         resolve(result.ghlApiKey);
       }
     });
   });
 }
 
+/**
+ * Fetches data from the GoHighLevel API.
+ * @param {string} endpoint The API endpoint to fetch.
+ * @param {object} options The options for the fetch request.
+ * @param {function} sendResponse The function to send the response to the content script.
+ */
 async function handleFetchGHL(endpoint, options = {}, sendResponse) {
   try {
+    // Retrieve the API key
     const apiKey = await getApiKey();
     if (!apiKey) {
+      // If the API key is not set, send an error response
       sendResponse({ success: false, error: "API Key not set. Please configure it in the extension options." });
       return;
     }
 
-    const GHL_BASE_URL = "https://rest.gohighlevel.com"; // Updated base URL for V1 API
-    const url = `${GHL_BASE_URL}${endpoint}`;
+    const GHL_BASE_URL = "https://rest.gohighlevel.com"; // Base URL for the GoHighLevel API
+    const url = `${GHL_BASE_URL}${endpoint}`; // Construct the full API URL
 
+    // Define the options for the fetch request
     const fetchOptions = {
-      method: options.method || 'GET',
+      method: options.method || 'GET', // Use the provided method or default to GET
       headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
+        'Authorization': `Bearer ${apiKey}`, // Add the API key to the Authorization header
+        'Content-Type': 'application/json', // Set the Content-Type header to application/json
+        'Accept': 'application/json' // Set the Accept header to application/json
         // Removed 'Version' header as it's not specified in V1 docs
       },
       ...options // Spread any additional options like body
     };
 
-    console.log("Fetching GHL API:", url, fetchOptions);
-    const response = await fetch(url, fetchOptions);
+    console.log("Fetching GHL API:", url, fetchOptions); // Log the API URL and fetch options for debugging
+    console.log("Fetching GHL API - URL:", url); // Log the API URL for debugging
+    console.log("Fetching GHL API - fetchOptions:", JSON.stringify(fetchOptions, null, 2)); // Log the fetch options for debugging
+    const response = await fetch(url, fetchOptions); // Fetch data from the API
 
     if (!response.ok) {
+      // If the response is not ok, log the error and send an error response
       let errorBody = "Could not read error body";
       try {
         errorBody = await response.text();
@@ -90,33 +119,75 @@ async function handleFetchGHL(endpoint, options = {}, sendResponse) {
       console.error("GHL API Error Response (parsed):", JSON.stringify(errorData, null, 2));
       sendResponse({ success: false, error: errorData });
       return;
+    } else {
+      console.log("Response was ok");
     }
 
     // For GET /v1/pipelines/, the response might be directly the array or nested.
     // Need to check the actual response structure later.
-    const data = await response.json();
-    console.log("GHL API Success Response:", data);
-    sendResponse({ success: true, data: data });
+    const data = await response.json(); // Parse the response body as JSON
+    console.log("GHL API Success Response:", data); // Log the API response for debugging
+    sendResponse({ success: true, data: data }); // Send a success response with the data
 
   } catch (error) {
+    // If there's an error during the API fetch, log the error and send an error response
     console.error("Error fetching GHL data:", error);
+    console.error("Error fetching GHL data - error:", error);
+    console.log("Error fetching GHL data - error:", error);
     sendResponse({ success: false, error: error.message || "An unknown error occurred during API fetch." });
   }
 }
 
+/**
+ * Creates a new opportunity in GoHighLevel.
+ * @param {object} opportunityData The data for the new opportunity.
+ * @param {function} sendResponse The function to send the response to the content script.
+ */
 async function handleCreateOpportunity(opportunityData, sendResponse) {
   // V1 endpoint: POST /v1/pipelines/:pipelineId/opportunities/
   // Ensure opportunityData includes pipelineId and other required fields for V1.
   if (!opportunityData.pipelineId) {
-      sendResponse({ success: false, error: "Pipeline ID is missing in the request data." });
-      return;
+    sendResponse({ success: false, error: "Pipeline ID is missing in the request data." });
+    return;
   }
   if (!opportunityData.opportunityName) {
-      sendResponse({ success: false, error: "Opportunity Name is missing in the request data." });
-      return;
+    sendResponse({ success: false, error: "Opportunity Name is missing in the request data." });
+    return;
   }
 
+let contactId = opportunityData.contactId;
+if (!contactId && opportunityData.email) {
+  // If contactId is not provided but email is, try to find an existing contact by email
+  const apiKey = await getApiKey();
+  const existingContact = await findContactByEmail(opportunityData.email, apiKey);
+  if (existingContact) {
+    // If an existing contact is found, use its ID
+    contactId = existingContact.id;
+    console.log("Found existing contact:", existingContact);
+  } else {
+    // If no existing contact is found, create a new contact
+    const newContactData = {
+      firstName: opportunityData.firstName,
+      email: opportunityData.email,
+      source: opportunityData.source
+    };
+    const newContact = await createContact(newContactData, apiKey);
+    if (newContact && newContact.contact) {
+      // If the new contact is created successfully, use its ID
+      contactId = newContact.contact.id;
+      console.log("Created new contact:", newContact);
+    } else {
+      // If the new contact creation fails, send an error response
+      console.error("Failed to create contact.");
+      sendResponse({ success: false, error: "Failed to create contact." });
+      return;
+    }
+  }
+}
+
+  // Construct the API endpoint URL
   const endpoint = `/v1/pipelines/${opportunityData.pipelineId}/opportunities/`;
+  // Define the options for the API request
   const options = {
     method: "POST",
     headers: {
@@ -124,41 +195,29 @@ async function handleCreateOpportunity(opportunityData, sendResponse) {
       Authorization: `Bearer ${await getApiKey()}`,
     },
     body: JSON.stringify({
-      title: opportunityData.opportunityName, // Map opportunityName to title
+      title: opportunityData.opportunityName,
       stageId: opportunityData.stageId,
       status: opportunityData.status,
       monetaryValue: opportunityData.monetaryValue,
-      contactId: opportunityData.contactId,
-      email: opportunityData.email,
-    }),
-  };
+      contactId: contactId
+  }),
+};
 
-  console.log("Creating opportunity with the following details:", {
-        endpoint,
-        method: options.method || "POST",
-        payload: options.body,
-      });
+    console.log("Creating opportunity with the following details:", {
+      endpoint,
+      method: options.method || "POST",
+      payload: options.body,
+    });
+    console.log("Creating opportunity - endpoint:", endpoint);
+    console.log("Creating opportunity - options:", JSON.stringify(options, null, 2));
 
-      console.log("Received data for opportunity creation:", {
-        pipelineId: opportunityData.pipelineId,
-        opportunityId: opportunityData.opportunityId,
-        status: opportunityData.status,
-        stageId: opportunityData.stageId,
-        contactId: opportunityData.contactId,
-      });
-
-      if (!opportunityData.stageId || (!opportunityData.contactId && !opportunityData.email)) {
-        console.error("Missing required fields: stageId or contactId/email.", {
-          stageId: opportunityData.stageId,
-          contactId: opportunityData.contactId,
-          email: opportunityData.email
-        });
-        sendResponse({
-          success: false,
-          error: "Missing required fields: stageId or contactId/email. Please ensure all fields are filled correctly."
-        });
-        return;
-      }
+    console.log("Received data for opportunity creation:", {
+      pipelineId: opportunityData.pipelineId,
+      opportunityId: opportunityData.opportunityId,
+      status: opportunityData.status,
+      stageId: opportunityData.stageId,
+      contactId: opportunityData.contactId
+    });
 
   try {
     const url = `https://services.leadconnectorhq.com${endpoint}`;
@@ -202,7 +261,124 @@ async function handleCreateOpportunity(opportunityData, sendResponse) {
 
   } catch (error) {
     console.error("Error creating GHL opportunity:", error);
+    console.error("Error creating GHL opportunity - error:", error);
+    console.log("Error creating GHL opportunity - error:", error);
     sendResponse({ success: false, error: error.message || "An unknown error occurred during API fetch." });
+  }
+}
+
+/**
+ * Finds a contact in GoHighLevel by email.
+ * @param {string} email The email address to search for.
+ * @param {string} apiKey The GoHighLevel API key.
+ * @returns {Promise<object|null>} A promise that resolves with the contact object if found, or null if not found or an error occurs.
+ */
+async function findContactByEmail(email, apiKey) {
+  const GHL_BASE_URL = "https://rest.gohighlevel.com";
+  const endpoint = `/v1/contacts/?email=${email}`;
+  const url = `${GHL_BASE_URL}${endpoint}`;
+
+  const options = {
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+      'Accept': 'application/json'
+    }
+  };
+
+  try {
+    console.log("Fetching contact with URL:", url);
+    console.log("Fetching contact with URL - URL:", url);
+    const response = await fetch(url, options);
+
+    if (!response.ok) {
+      let errorBody = "Could not read error body";
+      try {
+        errorBody = await response.text();
+      } catch (e) {
+        console.error("Error reading response body:", e);
+      }
+      console.error("GHL API Error Response (raw):", errorBody);
+      let errorData;
+      try {
+        errorData = JSON.parse(errorBody);
+      } catch (e) {
+        errorData = { message: "Unexpected error: Unable to parse error response." };
+      }
+      console.error("GHL API Error Response (parsed):", JSON.stringify(errorData, null, 2));
+      return null; // Indicate no contact found or error
+    }
+
+    const data = await response.json();
+    console.log("GHL API Success Response:", data);
+    console.log("GHL API Success Response (JSON):", JSON.stringify(data, null, 2));
+
+    if (data.contacts && data.contacts.length > 0) {
+      const contact = data.contacts[0];
+      if (contact.email === email) {
+        console.log("Found contact:", contact);
+        console.log("Found contact (JSON):", JSON.stringify(contact, null, 2));
+        return contact; // Return the first contact found
+      } else {
+        console.log("Found contact with different email:", contact.email, "Expected:", email);
+        return null;
+      }
+    } else {
+      return null; // No contact found
+    }
+
+  } catch (error) {
+    console.error("Error fetching GHL data:", error);
+    return null; // Indicate no contact found or error
+  }
+}
+
+async function createContact(contactData, apiKey) {
+  const GHL_BASE_URL = "https://rest.gohighlevel.com";
+  const endpoint = `/v1/contacts`;
+
+  const options = {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+      'Accept': 'application/json'
+    },
+    body: JSON.stringify(contactData)
+  };
+
+  try {
+    console.log("Creating contact with URL:", `${GHL_BASE_URL}${endpoint}`, options);
+    console.log("Creating contact with URL - URL:", `${GHL_BASE_URL}${endpoint}`);
+    console.log("Creating contact with URL - options:", JSON.stringify(options, null, 2));
+    const response = await fetch(`${GHL_BASE_URL}${endpoint}`, options);
+
+    if (!response.ok) {
+      let errorBody = "Could not read error body";
+      try {
+        errorBody = await response.text();
+      } catch (e) {
+        console.error("Error reading response body:", e);
+      }
+      console.error("GHL API Error Response (raw):", errorBody);
+      let errorData;
+      try {
+        errorData = JSON.parse(errorBody);
+      } catch (e) {
+        errorData = { message: "Unexpected error: Unable to parse error response." };
+      }
+      console.error("GHL API Error Response (parsed):", JSON.stringify(errorData, null, 2));
+      return null; // Indicate contact creation failure
+    }
+
+    const data = await response.json();
+    console.log("GHL API Success Response:", data);
+    return data; // Return the created contact data
+
+  } catch (error) {
+    console.error("Error fetching GHL data:", error);
+    return null; // Indicate contact creation failure
   }
 }
 
@@ -231,6 +407,8 @@ async function updateOpportunityStatus(pipelineId, opportunityId, status, stageI
     try {
       const response = await fetch(`https://rest.gohighlevel.com${endpoint}`, options);
       if (!response.ok) {
+        console.error("Error updating opportunity status - endpoint:", endpoint);
+        console.error("Error updating opportunity status - options:", JSON.stringify(options, null, 2));
         const errorData = await response.json();
         console.error("Error updating opportunity status:", errorData);
         sendResponse({ success: false, error: errorData });
