@@ -161,9 +161,8 @@ function handleFormSubmit(event) {
     });
 
     // Prepare data for V1 POST /v1/pipelines/:pipelineId/opportunities/
-    // API expects 'name', 'stageId', 'status', 'contactId' (or email/phone), 'monetaryValue', etc.
-    opportunityData.name = opportunityData.opportunityName; // API uses 'name' for opportunity title
-    delete opportunityData.opportunityName;
+    // API expects 'title', 'stageId', 'status', 'contactId' (or email/phone), 'monetaryValue', etc.
+    // Ensure opportunityName is preserved for the background script
 
     // Add contact details if contactId is not present
     if (!opportunityData.contactId) {
@@ -176,6 +175,7 @@ function handleFormSubmit(event) {
     delete opportunityData.contactEmail;
 
     console.log("Sending data to background:", opportunityData);
+    console.log("Sending data to background (JSON):", JSON.stringify(opportunityData, null, 2));
 
     // Send data to background script to make API call
     chrome.runtime.sendMessage({ action: "createOpportunity", data: opportunityData }, (response) => {
@@ -187,8 +187,8 @@ function handleFormSubmit(event) {
             showStatusMessage("Opportunity created successfully!", false);
             setTimeout(closeModal, 2000); // Close modal after success
         } else {
-            console.error("Failed to create opportunity:", response?.error);
-            showStatusMessage(`Error: ${response?.error || 'Unknown error'}`, true);
+            console.error("Failed to create opportunity:", JSON.stringify(response?.error, null, 2));
+            showStatusMessage(`Error: ${response?.error?.message || 'Unknown error'}`, true);
         }
     });
 }
@@ -263,6 +263,7 @@ function addGhlButtonToToolbar() {
         const button = document.createElement("button");
         button.innerText = "Create GHL Opp";
         button.className = "ghl-opportunity-button T-I J-J5-Ji T-I-Js-IF L3"; // Try to mimic Gmail styles
+        console.log("GHL button className:", button.className);
         button.style.marginLeft = "8px";
 
         button.onclick = (event) => {
@@ -273,7 +274,7 @@ function addGhlButtonToToolbar() {
         };
 
         // Find a suitable place to insert the button (e.g., next to other action buttons)
-        const referenceButton = toolbar.querySelector(".T-I-Js-IF"); // Find an existing button
+        const referenceButton = toolbar.querySelector(".T-I"); // Find an existing button
         if (referenceButton) {
             referenceButton.parentNode.insertBefore(button, referenceButton.nextSibling);
         } else {
