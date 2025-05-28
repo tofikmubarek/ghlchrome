@@ -7,11 +7,13 @@
     "storage",
     "scripting",
     "activeTab",
-    "scripting"
+    "identity"
   ],
   "host_permissions": [
     "*://mail.google.com/*",
-    "https://services.leadconnectorhq.com/*"
+    "https://services.leadconnectorhq.com/*",
+    "*://api.gohighlevel.com/*",
+    "<all_urls>"
   ],
   "background": {
     "service_worker": "background.js"
@@ -46,4 +48,3 @@
     }
   ]
 }
-

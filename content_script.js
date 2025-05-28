@@ -396,27 +396,17 @@ async function fetchOpportunities() {
     }
 
     try {
-        console.log("Fetching opportunities using MCP tool:", currentEmailData.senderEmail);
+        console.log("Fetching opportunities using email:", currentEmailData.senderEmail);
         const message = {
-            use_mcp_tool: true,
-            server_name: "ghl-oauth-server",
-            tool_name: "get_opportunities_by_email",
-            arguments: {
-                email: currentEmailData.senderEmail
-            }
+            action: "getOpportunitiesByEmail",
+            email: currentEmailData.senderEmail
         };
         console.log("Sending message to background script:", JSON.stringify(message));
         const response = await chrome.runtime.sendMessage(message);
 
         console.log("fetchOpportunities response:", JSON.stringify(response));
-        if (response && response.content && response.content[0] && response.content[0].text) {
-            try {
-                const opportunities = JSON.parse(response.content[0].text);
-                displayOpportunities(opportunities);
-            } catch (e) {
-                console.error("Error parsing opportunities:", e);
-                opportunitiesContainer.innerHTML = 'Error parsing opportunities.';
-            }
+        if (response && response.success && response.opportunities) {
+            displayOpportunities(response.opportunities);
         } else {
             opportunitiesContainer.innerHTML = 'Error fetching opportunities.';
             console.error("Error fetching opportunities:", response?.error);
