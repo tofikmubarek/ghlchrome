@@ -1,0 +1,29 @@
+# Node.js dependencies
+node_modules/
+
+# Logs
+*.log
+
+# Environment variables
+.env
+
+# Compiled files
+*.out
+*.exe
+*.dll
+
+# IDE files
+.vscode/
+.idea/
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Chrome extension build files
+*.crx
+*.pem
+
+# Miscellaneous
+*.bak
+*.tmp

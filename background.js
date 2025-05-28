@@ -5,6 +5,9 @@
 // Listen for messages from content scripts or options page
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   console.log("Background script received message:", request); // Log the received message for debugging
+  if (request.use_mcp_tool) {
+    console.log("Background script received MCP tool request:", request);
+  }
 
   if (request.action === "getApiKey") {
     chrome.storage.sync.get(["ghlApiKey"], (result) => {
@@ -42,6 +45,40 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   // Default response if action is not handled
   // sendResponse({ success: false, error: "Unknown action" });
   // return false; // No async response
+});
+
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request.use_mcp_tool) {
+    console.log("Background script received MCP tool request:", request);
+
+    const { server_name, tool_name, arguments } = request;
+    const command = `node ./ghl-oauth-server/index.js ${tool_name} '${JSON.stringify(arguments)}'`;
+
+    console.log("Executing MCP server command:", command);
+
+    const { exec } = require('child_process');
+    exec(command, (error, stdout, stderr) => {
+      if (error) {
+        console.error("Error executing MCP server command:", error);
+        sendResponse({ success: false, error: error.message });
+        return;
+      }
+
+      console.log("MCP server stdout:", stdout);
+      console.log("MCP server stderr:", stderr);
+
+      try {
+        const response = JSON.parse(stdout);
+        console.log("Parsed MCP server response:", response);
+        sendResponse({ success: true, content: response });
+      } catch (parseError) {
+        console.error("Error parsing MCP server response:", parseError);
+        sendResponse({ success: false, error: "Failed to parse MCP server response." });
+      }
+    });
+
+    return true; // Indicates that the response will be sent asynchronously
+  }
 });
 
 /**
@@ -422,6 +459,102 @@ async function updateOpportunityStatus(pipelineId, opportunityId, status, stageI
       console.error("Error updating opportunity status:", error);
       sendResponse({ success: false, error: error.message || "An unknown error occurred." });
     }
+  });
+  
+  // --- Fetch Opportunities by Email ---
+  async function getOpportunitiesByEmail(email, apiKey) {
+      const GHL_BASE_URL = "https://rest.gohighlevel.com";
+      const endpoint = `/v1/opportunities?email=${email}`;
+  
+      const options = {
+          method: 'GET',
+          headers: {
+              'Authorization': `Bearer ${apiKey}`,
+              'Content-Type': 'application/json',
+              'Accept': 'application/json'
+          }
+      };
+  
+      try {
+          console.log("Fetching opportunities with URL:", `${GHL_BASE_URL}${endpoint}`, options);
+          const response = await fetch(`${GHL_BASE_URL}${endpoint}`, options);
+  
+          if (!response.ok) {
+              let errorBody = "Could not read error body";
+              try {
+                  errorBody = await response.text();
+              } catch (e) {
+                  console.error("Error reading response body:", e);
+              }
+              console.error("GHL API Error Response (raw):", errorBody);
+              let errorData;
+              try {
+                  errorData = JSON.parse(errorBody);
+              } catch (e) {
+                  errorData = { message: "Unexpected error: Unable to parse error response." };
+              }
+              console.error("GHL API Error Response (parsed):", JSON.stringify(errorData, null, 2));
+              return { success: false, error: errorData };
+          }
+  
+          const data = await response.json();
+          console.log("GHL API Success Response:", data);
+          console.log("getOpportunitiesByEmail sending response:", { success: true, data: data.opportunities });
+          sendResponse({ success: true, data: data.opportunities }); // V1 returns opportunities in .opportunities array
+          return;
+
+      } catch (error) {
+          console.error("Error fetching GHL data:", error);
+          console.log("getOpportunitiesByEmail error:", error);
+          sendResponse({ success: false, error: error.message || "An unknown error occurred." });
+          return;
+      }
+  }
+  
+  // --- Message Listener Update ---
+  chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+      console.log("Background script message listener triggered:", JSON.stringify(request));
+  
+      if (request.action === "getApiKey") {
+          chrome.storage.sync.get(["ghlApiKey"], (result) => {
+              if (chrome.runtime.lastError) {
+                  console.error("Error retrieving API key:", chrome.runtime.lastError);
+                  sendResponse({ success: false, error: chrome.runtime.lastError.message });
+              } else {
+                  sendResponse({ success: true, apiKey: result.ghlApiKey });
+              }
+          });
+          return true;
+      }
+  
+      if (request.action === "getOpportunities") {
+          console.log("getOpportunities action received");
+          getApiKey().then(apiKey => {
+              if (!apiKey) {
+                  sendResponse({ success: false, error: "API Key not set. Please configure it in the extension options." });
+                  return;
+              }
+              getOpportunitiesByEmail(request.email, apiKey).then(response => {
+                  sendResponse(response);
+              });
+          });
+          return true;
+      }
+  
+      if (request.action === "fetchGHL") {
+          handleFetchGHL(request.endpoint, request.options, sendResponse);
+          return true;
+      }
+  
+      if (request.action === "createOpportunity") {
+          handleCreateOpportunity(request.data, sendResponse);
+          return true;
+      }
+  
+      if (request.action === "updateOpportunityStatus") {
+          updateOpportunityStatus(request.pipelineId, request.opportunityId, request.status, request.stageId, sendResponse);
+          return true;
+      }
   });
 }
 

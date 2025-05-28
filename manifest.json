@@ -1,12 +1,13 @@
 {
   "manifest_version": 3,
-  "name": "Gmail to GHL Opportunity Creator",
+  "name": "GHL Gmail Integration",
   "version": "1.0.0",
   "description": "Create GoHighLevel opportunities directly from Gmail.",
   "permissions": [
     "storage",
     "scripting",
-    "activeTab"
+    "activeTab",
+    "scripting"
   ],
   "host_permissions": [
     "*://mail.google.com/*",
@@ -20,8 +21,6 @@
       "matches": ["*://mail.google.com/*"],
       "js": ["content_script.js"],
       "css": ["styles.css"]
-      // Note: InboxSDK integration would typically involve loading their script first.
-      // For this prototype, we'll start without it and add integration later if feasible.
     }
   ],
   "options_ui": {
@@ -29,7 +28,6 @@
     "open_in_tab": true
   },
   "action": {
-    // "default_popup": "popup.html", // Optional: Can add later if needed
     "default_icon": {
       "16": "icons/icon16.png",
       "48": "icons/icon48.png",
@@ -40,6 +38,12 @@
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
-  }
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["get-refresh-token.js"],
+      "matches": ["<all_urls>"]
+    }
+  ]
 }
 

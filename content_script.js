@@ -281,7 +281,7 @@ function addGhlButtonToToolbar() {
 
         console.log("Attempting to add GHL button to toolbar:", toolbar);
         const button = document.createElement("button");
-        button.innerText = "Create GHL Opp";
+        button.innerText = "GHL";
         button.className = "ghl-opportunity-button T-I J-J5-Ji T-I-Js-IF L3"; // Try to mimic Gmail styles
         console.log("GHL button className:", button.className);
         button.style.marginLeft = "8px";
@@ -290,7 +290,7 @@ function addGhlButtonToToolbar() {
             event.stopPropagation(); // Prevent potential parent handlers
             console.log("GHL Opportunity button clicked!");
             // TODO: Reliably extract email data here using DOM traversal or InboxSDK
-            openModal();
+            openSidebar();
         };
 
         // Find a suitable place to insert the button (e.g., next to other action buttons)
@@ -334,3 +334,110 @@ observer.observe(document.body, {
 setTimeout(addGhlButtonToToolbar, 4000); // Increased delay
 
 console.log("GHL Content Script Setup Complete.");
+
+// --- Sidebar Functionality ---
+function openSidebar() {
+    console.log("Opening GHL Sidebar");
+    // 1. Check if sidebar already exists
+    let sidebar = document.getElementById('ghl-sidebar');
+
+    // 2. If not, create the sidebar
+    if (!sidebar) {
+        sidebar = document.createElement('div');
+        sidebar.id = 'ghl-sidebar';
+        sidebar.style.width = '300px';
+        sidebar.style.height = '100%';
+        sidebar.style.position = 'fixed';
+        sidebar.style.top = '0';
+        sidebar.style.right = '0';
+        sidebar.style.backgroundColor = 'white';
+        sidebar.style.border = '1px solid black';
+        sidebar.style.zIndex = '1000';
+        sidebar.style.padding = '10px';
+        document.body.appendChild(sidebar);
+
+        // Add close button
+        const closeButton = document.createElement('button');
+        closeButton.innerText = 'Close';
+        closeButton.onclick = closeSidebar;
+        sidebar.appendChild(closeButton);
+
+        // Add "Add Opportunity" button
+        const addOpportunityButton = document.createElement('button');
+        addOpportunityButton.innerText = 'Add Opportunity';
+        addOpportunityButton.onclick = openModal; // Re-use existing modal for now
+        sidebar.appendChild(addOpportunityButton);
+
+        // Add container for opportunities
+        const opportunitiesContainer = document.createElement('div');
+        opportunitiesContainer.id = 'ghl-opportunities';
+        sidebar.appendChild(opportunitiesContainer);
+    }
+
+    // 3. Prefill form and Fetch opportunities and display them
+    prefillForm();
+    fetchOpportunities();
+}
+
+function closeSidebar() {
+    const sidebar = document.getElementById('ghl-sidebar');
+    if (sidebar) {
+        sidebar.remove();
+    }
+}
+
+async function fetchOpportunities() {
+    const opportunitiesContainer = document.getElementById('ghl-opportunities');
+    opportunitiesContainer.innerHTML = 'Loading opportunities...';
+
+    if (!currentEmailData || !currentEmailData.senderEmail) {
+        opportunitiesContainer.innerHTML = 'Could not determine email address.';
+        return;
+    }
+
+    try {
+        console.log("Fetching opportunities using MCP tool:", currentEmailData.senderEmail);
+        const message = {
+            use_mcp_tool: true,
+            server_name: "ghl-oauth-server",
+            tool_name: "get_opportunities_by_email",
+            arguments: {
+                email: currentEmailData.senderEmail
+            }
+        };
+        console.log("Sending message to background script:", JSON.stringify(message));
+        const response = await chrome.runtime.sendMessage(message);
+
+        console.log("fetchOpportunities response:", JSON.stringify(response));
+        if (response && response.content && response.content[0] && response.content[0].text) {
+            try {
+                const opportunities = JSON.parse(response.content[0].text);
+                displayOpportunities(opportunities);
+            } catch (e) {
+                console.error("Error parsing opportunities:", e);
+                opportunitiesContainer.innerHTML = 'Error parsing opportunities.';
+            }
+        } else {
+            opportunitiesContainer.innerHTML = 'Error fetching opportunities.';
+            console.error("Error fetching opportunities:", response?.error);
+        }
+    } catch (error) {
+        opportunitiesContainer.innerHTML = 'Error fetching opportunities.';
+        console.error("Error fetching opportunities:", error);
+    }
+}
+
+function displayOpportunities(opportunities) {
+    const opportunitiesContainer = document.getElementById('ghl-opportunities');
+    opportunitiesContainer.innerHTML = '';
+
+    if (opportunities && opportunities.length > 0) {
+        opportunities.forEach(opportunity => {
+            const opportunityDiv = document.createElement('div');
+            opportunityDiv.innerText = opportunity.name; // Customize display as needed
+            opportunitiesContainer.appendChild(opportunityDiv);
+        });
+    } else {
+        opportunitiesContainer.innerHTML = 'No opportunities found. Click "Add Opportunity" to create one.';
+    }
+}
